@@ -159,6 +159,7 @@ class Job:
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_remove: Optional[Union['Callback', Callable[..., Any]]] = None,
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -254,6 +255,17 @@ class Job:
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
+
+        if on_remove:
+            if not isinstance(on_remove, Callback):
+                warnings.warn(
+                    'Passing a `Callable` `on_remove` is deprecated, pass `Callback` instead', DeprecationWarning
+                )
+                on_remove = Callback(on_remove)  # backward compatibility
+            job._remove_callback_name = on_remove.name
+            job._remove_callback_timeout = on_remove.timeout
+
+
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -437,6 +449,23 @@ class Job:
             return CALLBACK_TIMEOUT
 
         return self._failure_callback_timeout
+    
+    @property
+    def remove_callback(self):
+        if self._remove_callback is UNEVALUATED:
+            if self._remove_callback_name:
+                self._remove_callback = import_attribute(self._remove_callback_name)
+            else:
+                self._remove_callback = None
+
+        return self._remove_callback
+
+    @property
+    def remove_callback_timeout(self) -> int:
+        if self._remove_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._remove_callback_timeout
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -599,6 +628,8 @@ class Job:
         self._success_callback = UNEVALUATED
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
+        self._remove_calback_name = None
+        self._remove_callback= UNEVALUATED 
         self.description: Optional[str] = None
         self.origin: Optional[str] = None
         self.enqueued_at: Optional[datetime] = None
@@ -609,6 +640,7 @@ class Job:
         self.timeout: Optional[float] = None
         self._success_callback_timeout: Optional[int] = None
         self._failure_callback_timeout: Optional[int] = None
+        self._remove_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
@@ -905,6 +937,13 @@ class Job:
         if 'failure_callback_timeout' in obj:
             self._failure_callback_timeout = int(obj.get('failure_callback_timeout'))
 
+        if obj.get('remove_callback_name'):
+            self._remove_callback_name = obj.get('remove_callback_name').decode()
+
+        if 'remove_callback_timeout' in obj:
+            self._remove_callback_timeout = int(obj.get('remove_callback_timeout'))
+
+
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = json.loads(dep_ids.decode()) if dep_ids else [dep_id.decode()] if dep_id else []
@@ -956,6 +995,7 @@ class Job:
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
+            'remove_callback_name': self._failure_callback_name is self._remove_calback_name else ''.
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
@@ -986,6 +1026,8 @@ class Job:
             obj['success_callback_timeout'] = self._success_callback_timeout
         if self._failure_callback_timeout is not None:
             obj['failure_callback_timeout'] = self._failure_callback_timeout
+        if self._failure_callback_timeout is not None:
+            obj['remove_callback_timeout'] = self._remove_callback_timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1375,6 +1417,20 @@ class Job:
             logger.exception(f'Job {self.id}: error while executing failure callback')
             raise
 
+    
+    def execute_remove_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
+        """Executes remove_callback with possible timeout"""
+        if not self.remove_callback:
+            return
+
+        logger.debug('Running remove callbacks for %s', self.id)
+        try:
+            with death_penalty_class(self.remove_callback_timeout, JobTimeoutException, job_id=self.id):
+                self.remove_callback(self, self.connection, *exc_info)
+        except Exception:  # noqa
+            logger.exception(f'Job {self.id}: error while executing remove callback')
+            raise
+
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
         """Saves and cleanup job after successful execution"""
         # self.log.debug('Setting job %s status to finished', job.id)
@@ -1412,6 +1468,7 @@ class Job:
             from .results import Result
 
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.

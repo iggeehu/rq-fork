@@ -233,7 +233,7 @@ class StartedJobRegistry(BaseRegistry):
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     try:
-                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
+                        job = self.job_class.fetch(rjob_id, connection=self.connection, serializer=self.serializer)
                     except NoSuchJobError:
                         continue
 

@@ -496,6 +496,7 @@ class Queue:
         *,
         on_success: Optional[Callable] = None,
         on_failure: Optional[Callable] = None,
+        on_remove:  Optional[Callable] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -515,6 +516,7 @@ class Queue:
             retry (Optional[Retry], optional): The Retry Object. Defaults to None.
             on_success (Optional[Callable], optional): On success callable. Defaults to None.
             on_failure (Optional[Callable], optional): On failure callable. Defaults to None.
+            on_remove (Optional[Callable], optional): On remove callable. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -555,6 +557,7 @@ class Queue:
             serializer=self.serializer,
             on_success=on_success,
             on_failure=on_failure,
+            on_remove=on_remove
         )
 
         if retry:
@@ -637,6 +640,7 @@ class Queue:
         retry: Optional['Retry'] = None,
         on_success: Optional[Callable[..., Any]] = None,
         on_failure: Optional[Callable[..., Any]] = None,
+        on_remove: Optional[Callable[..., Any]] = None,
         pipeline: Optional['Pipeline'] = None,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
@@ -683,6 +687,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_remove=on_remove
         )
         return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
 
@@ -702,6 +707,7 @@ class Queue:
         retry: Optional['Retry'] = None,
         on_success: Optional[Callable] = None,
         on_failure: Optional[Callable] = None,
+        on_remove: Optional[Callable]=None
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -740,6 +746,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_remove
         )
 
     def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
@@ -772,6 +779,8 @@ class Queue:
                     retry=job_data.retry,
                     on_success=job_data.on_success,
                     on_failure=job_data.on_failure,
+                    on_remove=job_data.on_remove
+
                 ),
                 pipeline=pipe,
                 at_front=job_data.at_front,
@@ -833,6 +842,7 @@ class Queue:
         retry = kwargs.pop('retry', None)
         on_success = kwargs.pop('on_success', None)
         on_failure = kwargs.pop('on_failure', None)
+        on_remove = kwargs.pop('on_remove', None)
         pipeline = kwargs.pop('pipeline', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
@@ -854,6 +864,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_remove,
             pipeline,
             args,
             kwargs,
@@ -885,6 +896,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_remove,
             pipeline,
             args,
             kwargs,
@@ -906,6 +918,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_remove=on_remove,
             pipeline=pipeline,
         )
 
@@ -933,6 +946,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_remove,
             pipeline,
             args,
             kwargs,
@@ -953,6 +967,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_remove=on_remove
         )
         if at_front:
             job.enqueue_at_front = True
